@@ -1,1 +1,41 @@
-<h1>Hello, world!</h1>
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <title>Mandarin Tone Analyzer</title>
+</head>
+
+<body class="min-h-screen bg-slate-50 grid place-items-center p-6">
+    <div class="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+        <div>
+            <h1 class="text-lg font-semibold">Audio upload test</h1>
+            <p id="s" class="text-sm text-slate-600">Choose a file, upload, then play.</p>
+        </div>
+
+        <input id="f" type="file" accept="audio/*" class="block w-full text-sm" />
+        <button id="b" class="w-full rounded-xl bg-slate-900 text-white py-2 text-sm font-medium">Upload</button>
+        <audio id="p" controls class="w-full"></audio>
+    </div>
+
+    <script>
+        const f = document.getElementById("f"), b = document.getElementById("b"),
+            p = document.getElementById("p"), s = document.getElementById("s");
+
+        b.onclick = async () => {
+            if (!f.files[0]) return (s.textContent = "Pick a file first.");
+            s.textContent = "Uploading...";
+            const fd = new FormData(); fd.append("audio", f.files[0], f.files[0].name);
+            const r = await fetch("/api/upload", { method: "POST", body: fd });
+            const j = await r.json();
+            if (!r.ok) return (s.textContent = j.error || "Upload failed.");
+            p.src = j.file_url + "?t=" + Date.now(); p.play().catch(() => { });
+            s.textContent = "Uploaded.";
+        };
+    </script>
+</body>
+
+</html>

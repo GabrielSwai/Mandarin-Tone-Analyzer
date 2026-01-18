@@ -1,4 +1,4 @@
-from flask import Blueprint, send_from_directory, request, jsonify
+from flask import Blueprint, send_from_directory, request, jsonify, url_for
 from pathlib import Path
 from werkzeug.utils import secure_filename
 from uuid import uuid4
@@ -33,7 +33,7 @@ def upload():
 
     return jsonify( # return a URL
         {
-            "file_url": f"/uploads/{out_name}",
+            "file_url": url_for("apiroutes.uploads", filename = out_name),
             "bytes_saved": out_path.stat().st_size
         }
     )

@@ -13,27 +13,73 @@
     <div class="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div>
             <h1 class="text-lg font-semibold">Audio upload test</h1>
-            <p id="s" class="text-sm text-slate-600">Choose a file, upload, then play.</p>
+            <p id="s" class="text-sm text-slate-600">Click Record</p>
         </div>
-
-        <input id="f" type="file" accept="audio/*" class="block w-full text-sm" />
-        <button id="b" class="w-full rounded-xl bg-slate-900 text-white py-2 text-sm font-medium">Upload</button>
+        <div class="flex gap-2">
+            <button id="rec" class="flex-1 rounded-xl bg-red-600 text-white py-2 text-sm font-medium">Record</button>
+            <button id="stop" disabled
+                class="flex-1 rounded-xl bg-slate-200 text-slate-900 py-2 text-sm font-medium disabled:opacity-50">Stop</button>
+        </div>
         <audio id="p" controls class="w-full"></audio>
     </div>
 
     <script>
-        const f = document.getElementById("f"), b = document.getElementById("b"),
-            p = document.getElementById("p"), s = document.getElementById("s");
+        // grab elements
+        const s = document.getElementById("s"); // status text
+        const recBtn = document.getElementById("rec"); // "Record" button
+        const stopBtn = document.getElementById("stop"); // "Stop" button
+        const p = document.getElementById("p"); // <audio>
 
-        b.onclick = async () => {
-            if (!f.files[0]) return (s.textContent = "Pick a file first.");
+        // MediaRecorder state
+        let mr; // MediaRecorder instance (created when recording starts)
+        let chunks = []; // array of Blob parts (recorded audio pieces)
+
+        // when user clicks "Record":
+        recBtn.onclick = async () => {
+
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); // ask browser for microphone access and audio stream
+
+            mr = new MediaRecorder(stream); // create MediaRecorder to encode audio in browser-supported format
+
+            chunks = []; // reset `chunks` for new recording
+
+            mr.ondataavailable = (e) => chunks.push(e.data); // MediaRecorder fires this periodically
+
+            mr.onstop = async () => { // runs when recording stops
             s.textContent = "Uploading...";
-            const fd = new FormData(); fd.append("audio", f.files[0], f.files[0].name);
-            const r = await fetch("/api/upload", { method: "POST", body: fd });
-            const j = await r.json();
-            if (!r.ok) return (s.textContent = j.error || "Upload failed.");
-            p.src = j.file_url + "?t=" + Date.now(); p.play().catch(() => { });
-            s.textContent = "Uploaded.";
+
+            const blob = new Blob(chunks, { type: mr.mimeType }); // put the chunks into one audio file (mr.mimeType tso that it matches the browser)
+
+            const fd = new FormData(); // build a multipart payload for flask
+            fd.append("audio", blob, "recording.webm");
+
+            const r = await fetch("/api/upload", { method: "POST", body: fd }); // upload to flask
+
+            const j = await r.json(); // parse json response
+
+            p.src = j.file_url + "?t=" + Date.now(); // point the audio player at the server-served file
+
+            p.play().catch(() => {}); // try autoplay (does nothing if browser blocks it)
+
+            s.textContent = "Done!";
+            };
+
+            mr.start(); // start recording now
+
+            s.textContent = "Recording..."; // update UI
+            recBtn.disabled = true; // update UI
+            stopBtn.disabled = false; // update UI
+        };
+
+        // when user clicks "Stop":
+        stopBtn.onclick = () => {
+
+            mr.stop(); // tell MediaRecorder to finalize recording
+
+            mr.stream.getTracks().forEach((t) => t.stop()); // stop the mic stream tracks
+
+            recBtn.disabled = false; // update UI
+            stopBtn.disabled = true; // update UI
         };
     </script>
 </body>

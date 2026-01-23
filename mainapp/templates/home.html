@@ -26,6 +26,10 @@
             <button id="new" onclick="loadPhrase()" class="flex-1 rounded-xl bg-green-600 text-white px-4 py-2 text-sm font-medium">New</button>
             <button id="listen" class="flex-1 rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-medium">Listen</button>
         </div>
+        <div class="flex gap-2">
+            <button id="compare" class="rounded-xl bg-amber-600 text-white px-3 py-2 text-sm font-medium">Compare</button>
+            <pre id="result" class="text-xs bg-slate-100 rounded-xl p-3 mt-3 overflow-auto"></pre>
+        </div>
         <audio id="p" controls class="w-full"></audio>
     </div>
 
@@ -41,6 +45,7 @@
         let mr; // MediaRecorder instance (created when recording starts)
         let chunks = []; // array of Blob parts (recorded audio pieces)
         let currentPhraseId = "" // stores phrase_id so uploads can attach it
+        let lastFileUrl = "" // store the most recent upload so Compare knows what to analyze
 
         async function loadPhrase() {
             const r = await fetch("/api/phrase"); // call Flask route
@@ -75,6 +80,24 @@
             const j = await r.json(); // parse json response
 
             p.src = j.file_url + "?t=" + Date.now(); // point the audio player at the server-served file
+
+            lastFileUrl = j.file_url // cache last upload URL for the compare step
+
+            document.addEventListener("DOMContentLoaded", () => {
+                const btn = document.getElementById("compare"); // grab the button
+                console.log("compare btn =", btn); // should print the element, not null
+                if (!btn) return // if null, your HTML doesn't have id="compare" on this page
+
+                document.getElementById("compare").onclick = async () => {
+                    const r = await fetch("/api/compare", { // call placeholder compare endpoint
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ phrase_id: currentPhraseId, file_url: lastFileUrl }) // minimal payload
+                    })
+                    const j = await r.json() // {score, message, ...}
+                    document.getElementById("result").textContent = JSON.stringify(j, null, 2) // show raw JSON for now
+                }
+            })
 
             p.play().catch(() => {}); // try autoplay (does nothing if browser blocks it)
 

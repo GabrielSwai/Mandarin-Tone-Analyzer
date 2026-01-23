@@ -4,6 +4,7 @@ from werkzeug.utils import secure_filename
 from uuid import uuid4
 import random # for random phrase selection
 import json # for writing phrase_id sidecar metadata
+import time # for simple timestamps
 
 apiapp = Blueprint("apiroutes", __name__)
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads" # path of upload directory
@@ -23,6 +24,20 @@ def uploads(filename):
 @apiapp.get("/phrase")
 def phrase():
     return jsonify(random.choice(PHRASES)) # return {phrase_id, hanzi, pinyin}
+
+# compare recording to DB
+@apiapp.post("/compare")
+def compare():
+    data = request.get_json(force = True) # read JSON body
+    phrase_id = data.get("phrase_id", "") # grab `phrase_id`
+    file_url = data.get("file_url", "") # grab last uploaded file URL
+    return jsonify({ # placeholder response; later becomes Praat + alignment output
+        "phrase_id": phrase_id,
+        "file_url": file_url,
+        "score": random.randint(55, 95), # fake score for now
+        "message": "placeholder: next step is Praat F0 extraction + pitch plot",
+        "ts": int(time.time())
+    })
 
 # upload endpoint
 @apiapp.post("/upload")

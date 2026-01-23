@@ -15,10 +15,16 @@
             <h1 class="text-lg font-semibold">Audio upload test</h1>
             <p id="s" class="text-sm text-slate-600">Click Record</p>
         </div>
+        <div id="hanzi" class="text-3xl font-semibold"></div>
+        <div id="pinyin" class="text-slate-600"></div>
         <div class="flex gap-2">
             <button id="rec" class="flex-1 rounded-xl bg-red-600 text-white py-2 text-sm font-medium">Record</button>
             <button id="stop" disabled
                 class="flex-1 rounded-xl bg-slate-200 text-slate-900 py-2 text-sm font-medium disabled:opacity-50">Stop</button>
+        </div>
+        <div class="flex gap-2">
+            <button id="new" onclick="loadPhrase()" class="flex-1 rounded-xl bg-green-600 text-white px-4 py-2 text-sm font-medium">New</button>
+            <button id="listen" class="flex-1 rounded-xl bg-slate-900 text-white px-4 py-2 text-sm font-medium">Listen</button>
         </div>
         <audio id="p" controls class="w-full"></audio>
     </div>
@@ -29,10 +35,20 @@
         const recBtn = document.getElementById("rec"); // "Record" button
         const stopBtn = document.getElementById("stop"); // "Stop" button
         const p = document.getElementById("p"); // <audio>
+        const listenBtn = document.getElementById("listen") // grab the Listen button
 
         // MediaRecorder state
         let mr; // MediaRecorder instance (created when recording starts)
         let chunks = []; // array of Blob parts (recorded audio pieces)
+        let currentPhraseId = "" // stores phrase_id so uploads can attach it
+
+        async function loadPhrase() {
+            const r = await fetch("/api/phrase"); // call Flask route
+            const p = await r.json(); // {phrase_id, hanzi, pinyin}
+            currentPhraseId = p.phrase_id; // cache phrase_id for later upload
+            document.getElementById("hanzi").textContent = p.hanzi; // show 汉字
+            document.getElementById("pinyin").textContent = p.pinyin; // show pinyin
+        }
 
         // when user clicks "Record":
         recBtn.onclick = async () => {
@@ -52,6 +68,7 @@
 
             const fd = new FormData(); // build a multipart payload for flask
             fd.append("audio", blob, "recording.webm");
+            fd.append("phrase_id", currentPhraseId) // attach the current phrase_id to this recording
 
             const r = await fetch("/api/upload", { method: "POST", body: fd }); // upload to flask
 
@@ -80,6 +97,21 @@
 
             recBtn.disabled = false; // update UI
             stopBtn.disabled = true; // update UI
+        };
+
+        loadPhrase(); // initialize UI with a random phrase
+
+        function speakMandarin(text) {
+            const u = new SpeechSynthesisUtterance(text); // create speech request
+            u.lang = "zh-CN"; // request Mandarin voice
+            u.rate = 0.95; // slightly slower for learners
+            speechSynthesis.cancel(); // stop any current speech so it doesn’t overlap
+            speechSynthesis.speak(u); // speak now
+        };
+
+        listenBtn.onclick = () => {
+            const hanzi = document.getElementById("hanzi").textContent; // read current 汉字 from UI
+            if (hanzi) speakMandarin(hanzi); // speak the phrase
         };
     </script>
 </body>

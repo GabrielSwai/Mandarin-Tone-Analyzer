@@ -8,8 +8,8 @@ This is a concept/demo project with minimal UX.
 
 ## 📸 Screenshots and Demo Video
 
-![Home](docs/screenshot-home.png)
-![Results](docs/screenshot-results.png)
+![Home](./docs/screenshot-home.png)
+![Results](./docs/screenshot-results.png)
 
 Demo video: https://youtu.be/-Ele6t7fPr4
 

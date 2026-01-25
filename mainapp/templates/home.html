@@ -165,17 +165,22 @@
             s.textContent = "Done!"; // update status
         };
 
-        function speakMandarin(text) {
-            const u = new SpeechSynthesisUtterance(text); // create speech request
-            u.lang = "zh-CN"; // request Mandarin voice
-            u.rate = 0.95; // slightly slower for learners
-            speechSynthesis.cancel(); // stop any current speech so it doesn’t overlap
-            speechSynthesis.speak(u); // speak now
-        };
+        listenBtn.onclick = async () => {
+            if (!currentPhraseId) return; // no phrase yet
 
-        listenBtn.onclick = () => {
-            const hanzi = document.getElementById("hanzi").textContent; // read current 汉字 from UI
-            if (hanzi) speakMandarin(hanzi); // speak the phrase
+            s.textContent = "Generating TTS..."; // status
+
+            const r = await fetch("/api/tts", { // call server-side TTS
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ phrase_id: currentPhraseId }) // tell server what to speak
+            });
+
+            const j = await r.json(); // either {tts_url, phrase_id} or {error}
+
+            p.src = j.tts_url + "?t=" + Date.now(); // load generated mp3 (cache-bust)
+            await p.play().catch(() => {}); // play
+            s.textContent = "Playing TTS";
         };
     </script>
 </body>

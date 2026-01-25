@@ -6,6 +6,7 @@ from sqlalchemy import select, func
 from mainapp.db import get_session
 from mainapp.models import Phrase, Attempt
 from urllib.parse import urlparse
+from openai import OpenAI
 import random # for random phrase selection
 import json # for writing phrase_id sidecar metadata
 import time # for simple timestamps
@@ -19,6 +20,10 @@ matplotlib.use("Agg") # force non-GUI backend so plots work inside Flask threads
 import matplotlib.pyplot as plt
 
 apiapp = Blueprint("apiroutes", __name__)
+client = OpenAI() # OpenAI client reads OPENAI_API_KEY from .env
+
+TTS_DIR = Path(__file__).resolve().parent.parent / "artifacts" / "tts" # where generated TTS files are stored
+TTS_DIR.mkdir(parents = True, exist_ok = True) # ensure dir exists
 ARTIFACT_DIR = Path(__file__).resolve().parent.parent / "artifacts" # where plots + wavs go
 ARTIFACT_DIR.mkdir(exist_ok = True) # ensure artifacts dir exists
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads" # path of upload directory
@@ -535,6 +540,48 @@ def compare():
         "score": overall,
         "syllables": syllables,
         "plot_url": url_for("apiroutes.artifact", run_id = run_id, filename = "plot.png"),
+    })
+
+# serve generated TTS files back to browser
+@apiapp.get("/tts/<path:filename>")
+def tts_file(filename):
+    return send_from_directory(TTS_DIR, filename) # browser can play this URL
+
+# generate TTS audio from current phrase w/ OpenAI call
+@apiapp.post("/tts")
+def tts():
+    Session = get_session(current_app) # scoped session factory
+    db = Session() # open session
+
+    j = request.get_json(silent = True) or {} # parse JSON body
+    phrase_id = j.get("phrase_id", "") # phrase_id from frontend
+
+    if not phrase_id: # require phrase_id
+        return jsonify({"error": "missing phrase_id"}), 400
+
+    ph = db.get(Phrase, phrase_id) # fetch Phrase row by primary key from DB
+    if not ph: # handle unknown phrase_id
+        return jsonify({"error": "unknown phrase_id"}), 404
+
+    text = ph.hanzi # speak the hanzi text
+
+    out_name = f"{uuid4().hex}__tts.mp3" # unique filename
+    out_path = TTS_DIR / out_name # full disk path
+
+    # OpenAI TTS: model + voice + input text (mp3 is default)
+    with client.audio.speech.with_streaming_response.create(
+        model = "gpt-4o-mini-tts", # TTS model
+        voice = "marin", # built-in voice
+        input = text, # what gets spoken
+        instructions = "Speak Mandarin Chinese (zh-CN) clearly and naturally for a learner.", # style control
+        response_format = "mp3",
+        speed = 0.95, # slightly slower for learners
+    ) as response:
+        response.stream_to_file(out_path) # write audio bytes to disk
+
+    return jsonify({ # return playable URL to frontend
+        "tts_url": url_for("apiroutes.tts_file", filename = out_name), # adjust blueprint endpoint if needed
+        "phrase_id": phrase_id
     })
 
 # upload endpoint

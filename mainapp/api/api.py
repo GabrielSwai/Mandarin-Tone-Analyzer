@@ -1,7 +1,11 @@
-from flask import Blueprint, send_from_directory, request, jsonify, url_for
+from flask import Blueprint, send_from_directory, request, jsonify, url_for, current_app
 from pathlib import Path
 from werkzeug.utils import secure_filename
 from uuid import uuid4
+from sqlalchemy import select, func
+from mainapp.db import get_session
+from mainapp.models import Phrase, Attempt
+from urllib.parse import urlparse
 import random # for random phrase selection
 import json # for writing phrase_id sidecar metadata
 import time # for simple timestamps
@@ -13,7 +17,6 @@ import parselmouth
 import matplotlib
 matplotlib.use("Agg") # force non-GUI backend so plots work inside Flask threads
 import matplotlib.pyplot as plt
-from urllib.parse import urlparse
 
 apiapp = Blueprint("apiroutes", __name__)
 ARTIFACT_DIR = Path(__file__).resolve().parent.parent / "artifacts" # where plots + wavs go
@@ -331,6 +334,17 @@ TONE_MARKS = { # very small tone-mark lookup for common vowel diacritics
     "ǖ":1,"ǘ":2,"ǚ":3,"ǜ":4,
 } # if none found -> neutral/unknown
 
+# copy `PHRASES` list into DB once
+def seed_phrases_if_empty():
+    Session = get_session(current_app) # get scoped session
+    db = Session() # open session
+
+    count = db.query(Phrase).count() # how many phrases exist
+    if count == 0: # only seed if DB is empty
+        for ph in PHRASES:
+            db.add(Phrase(phrase_id = ph["phrase_id"], hanzi = ph["hanzi"], pinyin = ph["pinyin"])) # insert phrase
+        db.commit() # persist to SQLite
+
 # detect tone number from tone mark (super simple)
 def tone_from_pinyin_syllable(syl):
     for ch in syl:
@@ -466,10 +480,17 @@ def uploads(filename):
 def artifact(run_id, filename):
     return send_from_directory(ARTIFACT_DIR / run_id, filename) # serve plot.png, etc.
 
-# get a random phrase from the phrase bank
+# get a random phrase from the phrase bank DB
 @apiapp.get("/phrase")
 def phrase():
-    return jsonify(random.choice(PHRASES)) # return {phrase_id, hanzi, pinyin}
+    seed_phrases_if_empty() # ensure DB has phrases
+
+    Session = get_session(current_app) # scoped session factory
+    db = Session() # session
+
+    # quick random phrase:
+    ph = db.query(Phrase).order_by(func.random()).first() # pick random row
+    return jsonify({"phrase_id": ph.phrase_id, "hanzi": ph.hanzi, "pinyin": ph.pinyin})
 
 # compare recording to DB
 @apiapp.post("/compare")
@@ -498,12 +519,22 @@ def compare():
     fig.savefig(plot_path, dpi = 160) # save the plot
     plt.close(fig) # avoid matplotlib memory buildup
 
+    Session = get_session(current_app) # scoped session factory
+    db = Session() # session
+
+    db.add(Attempt( # save attempt result
+        phrase_id = phrase_id,
+        file_url = file_url,
+        score = overall,
+        syllables_json = json.dumps(syllables, ensure_ascii = False),
+        plot_url = url_for("apiroutes.artifact", run_id = run_id, filename = "plot.png"),
+    ))
+    db.commit() # write to sqlite
+
     return jsonify({
-        "phrase_id": phrase_id,
-        "file_url": file_url,
         "score": overall,
         "syllables": syllables,
-        "plot_url": url_for("apiroutes.artifact", run_id = run_id, filename = "plot.png"), # serve plot
+        "plot_url": url_for("apiroutes.artifact", run_id = run_id, filename = "plot.png"),
     })
 
 # upload endpoint

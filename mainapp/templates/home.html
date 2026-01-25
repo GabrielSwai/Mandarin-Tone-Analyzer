@@ -29,7 +29,7 @@
         <div class="flex gap-2">
             <button id="compare" type="button" class="rounded-xl bg-amber-600 text-white px-3 py-2 text-sm font-medium">Compare</button>
         </div>
-        <pre id="result" class="text-xs bg-slate-100 rounded-xl p-3 mt-3 overflow-auto"></pre>
+        <div id="result" class="rounded-xl bg-slate-100 p-3 text-sm"></div>
         <img id="plot" class="w-full rounded-xl border border-slate-200 hidden" />
         <audio id="p" controls class="w-full"></audio>
     </div>
@@ -128,7 +128,34 @@
             });
 
             const j = await r.json(); // parse response JSON
-            resultEl.textContent = JSON.stringify(j, null, 2); // show JSON
+            
+            // show overall score + per-syllable scores (simple UI)
+            const overall = j.score ?? "?"
+            const sylls = Array.isArray(j.syllables) ? j.syllables : []
+
+            resultEl.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div class="font-semibold">Overall</div>
+                    <div class="font-mono text-base">${overall}</div>
+                </div>
+
+                <div class="mt-3 grid grid-cols-2 gap-2">
+                    ${sylls.map(s => {
+                    const sc = s.score ?? 0
+                    const cls =
+                        sc >= 85 ? "bg-emerald-600" :
+                        sc >= 70 ? "bg-amber-500" :
+                                "bg-red-600"
+                    const label = s.syllable ?? `#${(s.idx ?? 0) + 1}`
+                    return `
+                        <div class="flex items-center justify-between rounded-lg bg-white px-3 py-2 border border-slate-200">
+                        <div class="text-slate-700">${label}</div>
+                        <div class="font-mono text-white px-2 py-0.5 rounded-md ${cls}">${sc}</div>
+                        </div>
+                    `
+                    }).join("")}
+                </div>
+            `
 
             if (j.plot_url) { // show plot if backend returns one
                 plotEl.src = j.plot_url + "?t=" + Date.now(); // cache-bust

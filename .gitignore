@@ -106,7 +106,7 @@ results/
 plots/
 spectrograms/
 pitch/
-*.png
+plot.png
 *.jpg
 *.jpeg
 *.svg
